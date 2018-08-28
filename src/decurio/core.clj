@@ -42,48 +42,6 @@
             (p/transition @v-transitioner this)
             true))))))
 
-(defrecord Tier2State [moved])
-(defn move [state] (update state :moved #(vswap! % %2) inc))
-(defrecord Tier1State [shared tier-2s moved])
-(defn share [state] (update state :shared #(vswap! % %2) inc))
-(let [v (volatile! (cycle [:moving :moving :moving :share]))]
-  (defn moving-transition
-    [_]
-    (if (< (rand) 0.05)
-      :finished
-      (first (vswap! v next)))))
-
-(defn make-tier-2
-  []
-  (let [the-state (Tier2State. (volatile! 0))]
-    (machine the-state
-             {:moving {:tasks [(partial move the-state)]
-                       :transition :moving}}
-             :moving)))
-(defn make-tier-1
-  []
-  (let [tier-2s (repeatedly 20 make-tier-2)
-        the-state (Tier1State. (volatile! 0) tier-2s (volatile! 0))]
-    (machine the-state
-             {:moving {:tasks (cons (partial move the-state) tier-2s)
-                       :transition moving-transition}
-              :share {:tasks [(partial share the-state)]
-                      :transition :moving}
-              :finished {}}
-             :moving)))
-
-(defn alternate-tier-1
-  []
-  (let [tier-2s (repeatedly 20 make-tier-2)
-        the-state (Tier1State. (volatile! 0) tier-2s (volatile! 0))]
-    (machine the-state
-             {:moving {:tasks (cons (partial move the-state) tier-2s)
-                       :transition (fn [_] (if (< (rand) 0.05) :finished :share))}
-              :share {:tasks [(t/repeating-task (partial share the-state) 3)]
-                      :transition :moving}
-              :finished {}}
-             :moving)))
-
 (defmacro defmachine
   [type-name fields+defaults states]
   ;; TODO: validate type-name

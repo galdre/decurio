@@ -2,7 +2,8 @@
   (:require [clojure.test :refer :all]
             [decurio.core :as c]
             [decurio.protocols :as p]
-            [decurio.task :as t])
+            [decurio.task :as t]
+            [decurio.execution :as ex])
   (:import [java.util.concurrent Executors]))
 
 #_(defmachine Particle
@@ -101,7 +102,7 @@
 
 (deftest basic-circular-machines-test
   (let [cmt1 (circular-machine-tier-1)]
-    (t/run-task* cmt1 ())
+    (ex/run-task* (t/step-to cmt1 :five) ())
     (let [tier-1-fields (p/fields cmt1)
           _ (is (= 4 @(:transitions tier-1-fields)))
           tier-2-fields (p/fields (:tier-2 tier-1-fields))
@@ -113,8 +114,7 @@
 (deftest concurrent-circular-machines-test
   (let [cmt1 (circular-machine-tier-1)
         es (Executors/newCachedThreadPool)]
-    (t/run-task cmt1 () es)
-    (Thread/sleep 100)
+    @(ex/execute (t/step-to cmt1 :five) es)
     (let [tier-1-fields (p/fields cmt1)
           _ (is (= 4 @(:transitions tier-1-fields)))
           tier-2-fields (p/fields (:tier-2 tier-1-fields))
@@ -138,7 +138,8 @@
         state {:tier-3s tier-3s
                :transitions (atom 0)}]
     (c/machine state
-               {:one {:tasks (map #(t/staged-task (repeat 5 [% % %])) tier-3s)
+               {:one {:tasks (map #(t/staged-task (repeat 5 [% % %]))
+                                  tier-3s)
                       :transition (count-transitions :one)}}
                :one)))
 
@@ -158,7 +159,7 @@
 
 (deftest basic-branching-machines-test
   (let [bmt1 (branching-machine-tier-1)]
-    (t/run-task* bmt1 ())
+    (ex/run-task* (t/step-to bmt1 :finished) ())
     (let [tier-1-fields (p/fields bmt1)
           _ (is (= 2 @(:transitions tier-1-fields)))
           tier-2s-fields (map p/fields
@@ -175,8 +176,7 @@
 (deftest concurrent-branching-machines-test
   (let [bmt1 (branching-machine-tier-1)
         es (Executors/newCachedThreadPool)]
-    (t/run-task bmt1 () es)
-    (Thread/sleep 100)
+    @(ex/execute (t/step-to bmt1 :finished) es)
     (let [tier-1-fields (p/fields bmt1)
           _ (is (= 2 @(:transitions tier-1-fields)))
           tier-2s-fields (map p/fields
@@ -189,4 +189,3 @@
           _ (is (= 200 (count tier-3s-fields)))
           _ (is (every? #(= 60 @(:transitions %)) tier-3s-fields))]
       (is true))))
-
