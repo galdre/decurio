@@ -6,57 +6,6 @@
             [decurio.execution :as ex])
   (:import [java.util.concurrent Executors]))
 
-#_(defmachine Particle
-  [position (init-position)
-   evaluate default-fitness
-   swarm-best (init-best position)
-   local-best (init-best position)
-   momentum (init-momentum position)]
-  {:step {:tasks [(Λ-step evaluate)]
-          :transition :step}})
-
-#_(defmachine Swarm
-  [size 10
-   best (init-best)
-   hive-best (init-best)
-   particles (repeatedly size #(particle :best best))]
-  {:step {:tasks particles
-          :transition (serial (times 5 :step)
-                              :evaluate)}
-   :evaluate {:transition evaluate-swarm}
-   :finished {:transition (finished :finished)}})
-
-#_(defmachine Hive
-  [size 5
-   hive-best (init-best)
-   swarms (repeatedly size #(swarm :best hive-best))]
-  {:step {:tasks swarms
-          :transition (serial (times 5 :step)
-                              :evaluate)}
-   :evaluate {:transition evaluate-hive}
-   :share {:tasks (Λ-share-among-swarms swarms)
-           :transition :reset-swarms}
-   :reset-swarms {:tasks (reset-all swarms :step)
-                  :transition :step}
-   :finished {:transition (finished :finished)}})
-
-#_(defn unlock
-  [state]
-  (update state :coins inc))
-
-#_(defn push
-  [state]
-  (update state :ingress inc))
-
-#_(defmachine Prototype
-  [coins 0
-   ingress 0]
-  {:locked {:tasks [unlock]
-            :transition :closed}
-   :closed {:tasks [push]
-            :transition :open}
-   :open {:transition :locked}})
-
 ;; Very simple tests first
 
 (defn count-transitions
@@ -189,3 +138,45 @@
           _ (is (= 200 (count tier-3s-fields)))
           _ (is (every? #(= 60 @(:transitions %)) tier-3s-fields))]
       (is true))))
+
+(defn error-producing-machine
+  []
+  (c/machine {}
+             {:one {:tasks [#(inc %)], :transition :finished}}
+             :one))
+
+(defn machine-wrapping-error-producing-machine
+  []
+  (let [problem-child (error-producing-machine)
+        state {:problem-child problem-child}]
+    (c/machine state
+               {:one {:tasks [problem-child], :transition :one}}
+               :one)))
+
+(defn machine-wrapping-error-producing-machine-squared
+  []
+  (let [bad-manager (machine-wrapping-error-producing-machine)
+        state {:bad-manager bad-manager}]
+    (c/machine state
+               {:one {:tasks [bad-manager], :transition :one}}
+               :one)))
+
+#_(deftest basic-error-propagation-test
+  (let [cmt1 (machine-wrapping-error-producing-machine-squared)]
+    (let ) (ex/exec (t/step-to cmt1 :five) ())
+    (let [tier-1-fields (p/fields cmt1)
+          _ (is (= 4 @(:transitions tier-1-fields)))
+          tier-2-fields (p/fields (:tier-2 tier-1-fields))
+          _ (is (= 12 @(:transitions tier-2-fields)))
+          tier-3-fields (p/fields (:tier-3 tier-2-fields))
+          _ (is (= 36 @(:transitions tier-3-fields)))]
+      (is true))))
+
+(deftest concurrent-error-propagation-test
+  (let [cmt1 (machine-wrapping-error-producing-machine-squared)
+        es (Executors/newCachedThreadPool)
+        result @(ex/execute (t/step-to cmt1 :five) es)]
+    (try
+      (println ["foo" result])
+      (is (instance? Throwable result))
+      (finally (.shutdownNow es)))))

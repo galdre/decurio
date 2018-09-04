@@ -17,13 +17,26 @@
           (true? discharge-val)
           (println "Task is complete."))))
 
+(defn- handle-transitively
+  [task [parent & ancestors] error]
+  (println "handling error")
+  (let [{t ::error}
+        (try
+          (p/handle-error task error)
+          (catch Throwable t {::error t}))]
+    (when (and t parent)
+      (recur parent ancestors t))))
+
 ;; ExecutorService
 
 (declare run-task)
 (defn- task->runnable
   [task ancestors executor]
   (fn []
-    (run-task task ancestors executor)))
+    (try
+      (run-task task ancestors executor)
+      (catch Throwable t
+        (handle-transitively task ancestors t)))))
 
 (defn- load-tasks
   [{:keys [tasks ancestors]} ^ExecutorService executor]
