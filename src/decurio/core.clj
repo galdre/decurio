@@ -29,7 +29,6 @@
           (p/step this)))
       (discharge [this]
         (locking this
-          #_(println "Before vswapping, it's " @v-i-remaining)
           (when (zero? (vswap! v-i-remaining dec))
             (p/transition @v-transitioner this)
             true)))

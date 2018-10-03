@@ -1,5 +1,6 @@
 (ns decurio.task
-  (:require [decurio.protocols :as p])
+  (:require [decurio.protocols :as p]
+            [tesserae.core :as t])
   (:import [java.util.concurrent ExecutorService]
            [clojure.lang IFn]))
 
@@ -62,11 +63,14 @@
          (error-fn error)
          (throw error))))))
 
-(defn- complete [assignment completed? promise discharge]
+(defn- complete [completion-fn assignment completed? promise discharge]
   (when (true? discharge)
     (vreset! completed? true)
-    (deliver promise assignment))
+    (completion-fn promise assignment))
   discharge)
+
+(def ^:private attain (partial complete deliver))
+(def ^:private fail (partial complete t/fumble))
 
 (defn task->assignment
   [task]
@@ -74,7 +78,7 @@
     task
     (let [begun? (volatile! false)
           completed? (volatile! false)
-          completion (promise)]
+          completion (t/promise)]
       (reify p/Task
         (begin [this]
           (locking this
@@ -84,14 +88,13 @@
               (println "already begun"))))
         (discharge [this]
           (if (and @begun? (not @completed?))
-            (complete task completed? completion (p/discharge task))
+            (attain task completed? completion (p/discharge task))
             (println "can't discharge!")))
         (handle-error [this error]
           (try (p/handle-error task error)
                (catch Throwable t
-                 (complete t completed? completion true))))
+                 (fail t completed? completion true))))
         p/Assignment
         (begun? [_] @begun?)
         (completed? [_] @completed?)
         (completion-promise [_] completion)))))
-

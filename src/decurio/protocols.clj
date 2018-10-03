@@ -50,5 +50,3 @@
   (transition [kw machine] (force-state machine kw))
   IFn
   (transition [f machine] (force-state machine (f machine))))
-
-

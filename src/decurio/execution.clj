@@ -6,20 +6,17 @@
 (defn- discharge-transitively
   "Returns a sequence of tasks to execute."
   [[task & tasks]]
-  #_(println "discharging the stack")
   (when-let [discharge-val (p/discharge task)]
     (cond (sequential? discharge-val)
           {:tasks discharge-val
            :ancestors (cons task tasks)}
           (seq tasks)
-          (do #_(println "recurring")
-            (recur tasks))
+          (recur tasks)
           (true? discharge-val)
           (println "Task is complete."))))
 
 (defn- handle-transitively
   [task [parent & ancestors] error]
-  (println "handling error")
   (let [{t ::error}
         (try
           (p/handle-error task error)
@@ -40,7 +37,6 @@
 
 (defn- load-tasks
   [{:keys [tasks ancestors]} ^ExecutorService executor]
-  #_(println "loading task")
   (when tasks
     (doseq [task tasks]
       (->> (task->runnable task ancestors executor)

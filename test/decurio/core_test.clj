@@ -4,7 +4,8 @@
             [decurio.protocols :as p]
             [decurio.task :as t]
             [decurio.execution :as ex])
-  (:import [java.util.concurrent Executors]))
+  (:import [java.util.concurrent Executors]
+           [java.util.concurrent.locks StampedLock]))
 
 ;; Very simple tests first
 
@@ -161,22 +162,15 @@
                {:one {:tasks [bad-manager], :transition :one}}
                :one)))
 
-#_(deftest basic-error-propagation-test
+(deftest basic-error-propagation-test
   (let [cmt1 (machine-wrapping-error-producing-machine-squared)]
-    (let ) (ex/exec (t/step-to cmt1 :five) ())
-    (let [tier-1-fields (p/fields cmt1)
-          _ (is (= 4 @(:transitions tier-1-fields)))
-          tier-2-fields (p/fields (:tier-2 tier-1-fields))
-          _ (is (= 12 @(:transitions tier-2-fields)))
-          tier-3-fields (p/fields (:tier-3 tier-2-fields))
-          _ (is (= 36 @(:transitions tier-3-fields)))]
-      (is true))))
+    (is (thrown? Throwable
+                 (ex/run-task* (t/step-to cmt1 :five) ())))))
 
 (deftest concurrent-error-propagation-test
   (let [cmt1 (machine-wrapping-error-producing-machine-squared)
-        es (Executors/newCachedThreadPool)
-        result @(ex/execute (t/step-to cmt1 :five) es)]
+        es (Executors/newCachedThreadPool)]
     (try
-      (println ["foo" result])
-      (is (instance? Throwable result))
+      (is (thrown? Throwable @(ex/execute (t/step-to cmt1 :five) es)))
       (finally (.shutdownNow es)))))
+
